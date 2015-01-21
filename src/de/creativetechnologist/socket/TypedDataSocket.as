@@ -316,6 +316,7 @@ public class TypedDataSocket {
 					data = bytes.readObject();
 				}
 				else {
+					data = bytes;
 					trace("TypedDataSocket->onClientSocketData() [265]:: Received data with unknown format!" );
 				}
 
