@@ -166,7 +166,7 @@ public class TypedDataSocket {
 		var bytes: ByteArray = new ByteArray();
 		bytes.writeObject(data);
 		bytes.position = 0;
-		sendBytes(FORMAT_OBJECT, bytes, type);
+		sendBytes(bytes, type, FORMAT_OBJECT);
 	}
 
 
@@ -178,7 +178,7 @@ public class TypedDataSocket {
 		var bytes: ByteArray = new ByteArray();
 		bytes.writeInt(value);
 		bytes.position = 0;
-		sendBytes(FORMAT_INT, bytes, type);
+		sendBytes(bytes, type, FORMAT_INT);
 
 	}
 
@@ -191,12 +191,12 @@ public class TypedDataSocket {
 		var bytes: ByteArray = new ByteArray();
 		bytes.writeUTF(string);
 		bytes.position = 0;
-		sendBytes(FORMAT_STRING, bytes, type);
+		sendBytes(bytes, type, FORMAT_STRING);
 
 	}
 
 
-	public function sendBytes(format: uint, data: ByteArray, type: uint = 0): void {
+	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 1): void {
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(data.length);
 		sendData.writeUnsignedInt(format);
