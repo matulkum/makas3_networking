@@ -4,6 +4,7 @@
 package de.creativetechnologist.socket {
 import flash.events.ServerSocketConnectEvent;
 import flash.net.ServerSocket;
+import flash.utils.Dictionary;
 
 import org.osflash.signals.Signal;
 
@@ -14,17 +15,28 @@ public class TypedDataSocketServer {
 	private var serverSocket: ServerSocket;
 	private var clientSockets: Vector.<TypedDataSocket>;
 
+	private var type_2_listenerVector: Dictionary;
+
 	// (this, socket:TypedDataSocket)
 	public var signalClientSocketConnect: Signal;
 
-	private var isInit: Boolean = false;
+
+
 
 	public function TypedDataSocketServer() {
+		clientSockets = new <TypedDataSocket>[];
 		signalClientSocketConnect = new Signal(TypedDataSocketServer, TypedDataSocket);
 	}
 
 
 	public function dispose(): void {
+		disposeClients();
+		disposeServerSocket();
+		type_2_listenerVector = null;
+	}
+
+
+	protected function disposeClients(): void {
 		if( clientSockets ) {
 			for each (var socket: TypedDataSocket in clientSockets) {
 				socket.dispose();
@@ -33,20 +45,65 @@ public class TypedDataSocketServer {
 		}
 	}
 
+	private function disposeServerSocket(): void {
+		if (serverSocket) {
+			try {serverSocket.close();}
+			catch (e: Error) {}
+			serverSocket = null;
+		}
+	}
+
+
+
+	public function addListenerForGlobalType(type: uint, listener: Function): void {
+		if( !type_2_listenerVector ) {
+			type_2_listenerVector = new Dictionary();
+			type_2_listenerVector[type] = new <Function>[listener];
+			return;
+		}
+		var listenerVector: Vector.<Function> = type_2_listenerVector[type];
+		if( !listenerVector )
+			type_2_listenerVector[type] = new <Function>[listener];
+
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].addListenerForType(type, listener);
+		}
+	}
+
+
+	public function removeListenerForGlobalType(type: uint, listener: Function): void {
+		if( !type_2_listenerVector)
+			return;
+
+		var listenerVector: Vector.<Function> = type_2_listenerVector[type];
+		if( listenerVector ) {
+			var index: int = listenerVector.indexOf(listener);
+			if( index > -1) {
+				listenerVector.splice(index, 1);
+				if( listenerVector.length == 0)
+					delete type_2_listenerVector[type];
+
+				var i: int;
+				var length: int = clientSockets.length;
+				for (i = 0; i < length; i++) {
+					clientSockets[i].removeListenerForType(type, listener);
+				}
+			}
+		}
+	}
+
 
 	public function listen(localPort: int): void {
-		if( isInit )
-			return;
-		isInit = true;
 
 		this.localPort = localPort;
 
 //		Log.info('SignalSocketServer -> init()');
 
-
-		clientSockets = new <TypedDataSocket>[];
-
+		disposeServerSocket()
 		serverSocket = new ServerSocket();
+
 		try {
 			serverSocket.bind(localPort);
 			serverSocket.addEventListener(ServerSocketConnectEvent.CONNECT, onServerSocketConnect);
@@ -77,6 +134,16 @@ public class TypedDataSocketServer {
 //		typedDataSocket.signalDataReceiveComplete.add(onTypedDataSocketDataReceived);
 
 		clientSockets.push(typedDataSocket);
+
+		if( type_2_listenerVector ) {
+			for(var type: uint in type_2_listenerVector)
+			var listenerVector: Vector.<Function> = type_2_listenerVector[type];
+			if( listenerVector ) {
+				for each (var listener: Function in listenerVector) {
+					typedDataSocket.addListenerForType(type, listener);
+				}
+			}
+		}
 		signalClientSocketConnect.dispatch(this, typedDataSocket);
 	}
 

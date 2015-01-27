@@ -56,10 +56,12 @@ public class TypedDataSocket {
 	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
 	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
 
-	public static const FORMAT_BYTES : uint = 1;
-	public static const FORMAT_STRING : uint = 2;
-	public static const FORMAT_INT : uint = 3;
-	public static const FORMAT_OBJECT : uint = 1000;
+	public static const FORMAT_EMPTY : uint = 1;
+	public static const FORMAT_BYTES : uint = 2;
+	public static const FORMAT_STRING : uint = 3;
+	public static const FORMAT_INT : uint = 4;
+	public static const FORMAT_OBJECT : uint = 10;
+	private var newMessage: Boolean = true;
 
 
 	public function TypedDataSocket(socket: Socket = null) {
@@ -192,7 +194,6 @@ public class TypedDataSocket {
 		bytes.writeUTF(string);
 		bytes.position = 0;
 		sendBytes(bytes, type, FORMAT_STRING);
-
 	}
 
 
@@ -210,11 +211,32 @@ public class TypedDataSocket {
 	}
 
 
+	public function sendEmpty(type: uint): void {
+		var sendData: ByteArray = new ByteArray();
+		sendData.writeUnsignedInt(0); // message length is 0
+		sendData.writeUnsignedInt(FORMAT_EMPTY);
+		sendData.writeUnsignedInt(type);
+
+		sendData.position = 0;
+		socket.writeBytes(sendData);
+		socket.flush();
+	}
+
+
 
 	public function addListenerForType(type: uint, listener: Function): void {
 		if( !type_to_signal )
 			type_to_signal = new Dictionary();
 		addListenerForTypeToSignalMap(type_to_signal, type, listener);
+	}
+
+	public function removeListenerForType(type: uint, listener: Function): void {
+		if( !type_to_signal )
+			return;
+
+		removeListenerForTypeFromSignalMap(type_to_signal, type, listener);
+		if( type_to_signal.length <= 0)
+			type_to_signal = null;
 	}
 
 
@@ -227,7 +249,7 @@ public class TypedDataSocket {
 	public function removeProgressListenerForType(type: uint, listener: Function): void {
 		if( !type_to_progressSignal )
 			return;
-		removeListenerForType(type_to_progressSignal, type, listener);
+		removeListenerForTypeFromSignalMap(type_to_progressSignal, type, listener);
 		if( type_to_progressSignal.length <= 0)
 			type_to_progressSignal = null;
 	}
@@ -244,7 +266,7 @@ public class TypedDataSocket {
 	}
 
 
-	private function removeListenerForType(signalMap: Dictionary, type:uint, listener: Function): void {
+	private function removeListenerForTypeFromSignalMap(signalMap: Dictionary, type:uint, listener: Function): void {
 		var signal: Signal = signalMap[type] as Signal;
 		if(signal) {
 			signal.remove(listener);
@@ -283,13 +305,14 @@ public class TypedDataSocket {
 //		if(clientSocket.bytesAvailable < 8 ) {
 //			Log.debug('package to small');
 //		}
-		// 4 bytes for message length + 4 bytes for messageType
+		// 4 bytes for message length + 4 bytes for messageFormat + 4 bytes for messageType
 		while ( clientSocket.bytesAvailable >= 12 ) {
 			// is it a new Message?
-			if( receivingMessageLength == 0) {
+			if( newMessage ) {
 				receivingMessageLength = clientSocket.readUnsignedInt();
 				receivingMessageFormat = clientSocket.readUnsignedInt();
 				receivingMessageType = clientSocket.readUnsignedInt();
+				newMessage = false;
 
 //				Log.debug('receiving new message with type '+ receivingMessageFormat + ' and length ' + receivingMessageLength);
 			}
@@ -297,28 +320,33 @@ public class TypedDataSocket {
 			if( receivingMessageLength <= clientSocket.bytesAvailable) {
 //				Log.debug('received new message with type '+ receivingMessageFormat);
 
-				var bytes: ByteArray = new ByteArray();
 				var data: *;
-				clientSocket.readBytes(bytes, 0, receivingMessageLength);
-				bytes.position = 0;
 
-				if( receivingMessageFormat == FORMAT_BYTES) {
-					data = bytes;
+				if( receivingMessageFormat != FORMAT_EMPTY) {
+					var bytes: ByteArray = new ByteArray();
+
+					clientSocket.readBytes(bytes, 0, receivingMessageLength);
+					bytes.position = 0;
+
+					if( receivingMessageFormat == FORMAT_BYTES) {
+						data = bytes;
+					}
+					else if( receivingMessageFormat == FORMAT_STRING) {
+						data = bytes.readUTF();
+					}
+					else if( receivingMessageFormat == FORMAT_INT ) {
+						data = bytes.readInt();
+					}
+					// is receiving type serializable?
+					else if( receivingMessageFormat >= FORMAT_OBJECT ) {
+						data = bytes.readObject();
+					}
+					else {
+						data = bytes;
+						trace("TypedDataSocket->onClientSocketData() [265]:: Received data with unknown format!" );
+					}
 				}
-				else if( receivingMessageFormat == FORMAT_STRING) {
-					data = bytes.readUTF();
-				}
-				else if( receivingMessageFormat == FORMAT_INT ) {
-					data = bytes.readInt();
-				}
-				// is receiving type serializable?
-				else if( receivingMessageFormat >= FORMAT_OBJECT ) {
-					data = bytes.readObject();
-				}
-				else {
-					data = bytes;
-					trace("TypedDataSocket->onClientSocketData() [265]:: Received data with unknown format!" );
-				}
+
 
 				// dispatch for all
 				signalDataReceiveComplete.dispatch(this, data, receivingMessageFormat, receivingMessageType);
@@ -327,13 +355,14 @@ public class TypedDataSocket {
 				if( type_to_signal ) {
 					var signal: Signal = type_to_signal[receivingMessageType] as Signal;
 					if( signal ) {
-						signal.dispatch(this, data);
+						signal.dispatch(this, data, receivingMessageFormat, receivingMessageType);
 					}
 				}
 
 				receivingMessageLength = 0;
 				receivingMessageFormat = 0;
 				receivingMessageType = 0;
+				newMessage = true;
 			}
 			// is message loading in progress?
 			else {
