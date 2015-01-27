@@ -220,6 +220,10 @@ public class TypedDataSocket {
 
 
 	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 1): void {
+		if( !socket || !socket.connected) {
+			trace("TypedDataSocket->sendString() :: Socket not connected" );
+			return;
+		}
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(format);
 		sendData.writeUnsignedInt(type);
@@ -239,10 +243,13 @@ public class TypedDataSocket {
 	 * @param type
 	 */
 	public function sendType(type: uint): void {
+		if( !socket || !socket.connected) {
+			trace("TypedDataSocket->sendString() :: Socket not connected" );
+			return;
+		}
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(FORMAT_EMPTY);
 		sendData.writeUnsignedInt(type);
-		sendData.writeUnsignedInt(0); // message length is 0
 
 		sendData.position = 0;
 		socket.writeBytes(sendData);
@@ -395,6 +402,7 @@ public class TypedDataSocket {
 
 		// if data is FORMAT_EMPTY there is nothing more to read
 		if( receivingMessageFormat == FORMAT_EMPTY) {
+			trace('received empty type', receivingMessageType);
 			dispatchMessage(null, receivingMessageFormat, receivingMessageType);
 			receivingMessageFormat = -1;
 			receivingMessageType = -1;

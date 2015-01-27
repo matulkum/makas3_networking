@@ -165,16 +165,15 @@ public class TypedDataSocketServer {
 		var typedDataSocket: TypedDataSocket = new TypedDataSocket(event.socket);
 		typedDataSocket.signalConnection.add(onTypedDataSocketConnection);
 
-//		typedDataSocket.signalDataReceiveComplete.add(onTypedDataSocketDataReceived);
-
 		clientSockets.push(typedDataSocket);
 
 		if( type_2_listenerVector ) {
-			for(var type: uint in type_2_listenerVector)
-			var listenerVector: Vector.<Function> = type_2_listenerVector[type];
-			if( listenerVector ) {
-				for each (var listener: Function in listenerVector) {
-					typedDataSocket.addListenerForType(type, listener);
+			for(var type: uint in type_2_listenerVector) {
+				var listenerVector: Vector.<Function> = type_2_listenerVector[type];
+				if( listenerVector ) {
+					for each (var listener: Function in listenerVector) {
+						typedDataSocket.addListenerForType(type, listener);
+					}
 				}
 			}
 		}
