@@ -78,6 +78,15 @@ public class TypedDataSocketServer {
 	}
 
 
+	public function sendType(type: uint): void {
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].sendType(type);
+		}
+	}
+
+
 	// listeners
 	public function addListenerForGlobalType(type: uint, listener: Function): void {
 		if( !type_2_listenerVector ) {

@@ -227,7 +227,7 @@ public class TypedDataSocket {
 	}
 
 
-	public function sendEmpty(type: uint): void {
+	public function sendType(type: uint): void {
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(FORMAT_EMPTY);
 		sendData.writeUnsignedInt(type);
