@@ -95,18 +95,14 @@ public class TypedDataSocket {
 
 		var type: String;
 		if( type_to_signal ) {
-			for( type in type_to_signal ) {
+			for( type in type_to_signal )
 				Signal(type_to_signal[type]).removeAll();
-				delete type_to_signal[type];
-				type_to_signal = null;
-			}
+			type_to_signal = null;
 		}
 		if( type_to_progressSignal ) {
-			for( type in type_to_progressSignal ) {
+			for( type in type_to_progressSignal )
 				Signal(type_to_progressSignal[type]).removeAll();
-				delete type_to_progressSignal[type];
-				type_to_progressSignal = null;
-			}
+			type_to_progressSignal = null;
 		}
 
 		if( retryTimer ) {
