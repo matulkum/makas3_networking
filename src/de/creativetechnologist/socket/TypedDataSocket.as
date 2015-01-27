@@ -130,6 +130,13 @@ public class TypedDataSocket {
 	}
 
 
+	/**
+	 *
+	 * @param remoteHost
+	 * @param remotePort
+	 * @param keepAlive If true retries connection if connection attemp fails and reconnect  on disconnect
+	 * @return False if socket could not be opened
+	 */
 	public function connect(remoteHost: String, remotePort: int, keepAlive: Boolean = true): Boolean {
 //		Log.debug('SignalSenderSocket -> init()', remoteHost, remotePort);
 
@@ -227,6 +234,10 @@ public class TypedDataSocket {
 	}
 
 
+	/**
+	 * Sends a message without data
+	 * @param type
+	 */
 	public function sendType(type: uint): void {
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(FORMAT_EMPTY);
@@ -239,6 +250,10 @@ public class TypedDataSocket {
 	}
 
 
+	/**
+	 * Sends an message (which is ignored by the receiver) in a specified intervall
+	 * @param ms Intervall delay in milliSeconds
+	 */
 	public function startPooling(ms: int = 3000): void {
 		if( !poolingTimer ) {
 			poolingTimer = new Timer(ms);
@@ -269,6 +284,7 @@ public class TypedDataSocket {
 			type_to_signal = new Dictionary();
 		addListenerForTypeToSignalMap(type_to_signal, type, listener);
 	}
+
 
 	public function removeListenerForType(type: uint, listener: Function): void {
 		if( !type_to_signal )
@@ -377,12 +393,14 @@ public class TypedDataSocket {
 			receivingMessageType = clientSocket.readUnsignedInt();
 		}
 
+		// if data is FORMAT_EMPTY there is nothing more to read
 		if( receivingMessageFormat == FORMAT_EMPTY) {
 			dispatchMessage(null, receivingMessageFormat, receivingMessageType);
 			receivingMessageFormat = -1;
 			receivingMessageType = -1;
 			return;
 		}
+		// is FORMAT_INT ?
 		else if( receivingMessageFormat == FORMAT_INT) {
 			if( clientSocket.bytesAvailable >= 4) {
 				dispatchMessage(clientSocket.readInt(), receivingMessageFormat, receivingMessageType)
@@ -391,17 +409,21 @@ public class TypedDataSocket {
 				return;
 			}
 		}
+		// else format is either Object or Bytes
 		else {
+			// do we need to read the messageLength
 			if( receivingMessageLength <= 0 ) {
 
 				// enough byte available to res messageLength?
 				if( clientSocket.bytesAvailable < 4)
 					return;
-
 				receivingMessageLength = clientSocket.readUnsignedInt();
 			}
 
+			// if there is not all bytes of the message yet
 			if( receivingMessageLength > clientSocket.bytesAvailable) {
+
+				// dispathc progress
 				signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
 
 				// dispatch for instances which listen just for a specific type
@@ -411,6 +433,7 @@ public class TypedDataSocket {
 						signal.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
 				}
 			}
+			// else a whole message is available in the clientSocket
 			else {
 				var bytes: ByteArray = new ByteArray();
 				clientSocket.readBytes(bytes, 0, receivingMessageLength);
