@@ -34,8 +34,8 @@ public class TypedDataSocket {
 	private var isInit: Boolean;
 
 	private var receivingMessageLength: uint = 0;
-	private var receivingMessageFormat: int = 0;
-	private var receivingMessageType: int = 0;
+	private var receivingMessageFormat: int = -1;
+	private var receivingMessageType: int = -1;
 
 	// [String] => Signal(this, data:*)
 	private var type_to_signal: Dictionary;
@@ -61,7 +61,8 @@ public class TypedDataSocket {
 	public static const FORMAT_STRING : uint = 3;
 	public static const FORMAT_INT : uint = 4;
 	public static const FORMAT_OBJECT : uint = 10;
-	private var newMessage: Boolean = true;
+	public static const FORMAT_POOLING : uint = 100;
+
 
 
 	public function TypedDataSocket(socket: Socket = null) {
@@ -123,7 +124,12 @@ public class TypedDataSocket {
 	public function connect(remoteHost: String, remotePort: int, keepAlive: Boolean = true): Boolean {
 //		Log.debug('SignalSenderSocket -> init()', remoteHost, remotePort);
 
+		receivingMessageFormat = -1;
+		receivingMessageType = -1;
+		receivingMessageLength = 0;
+
 		this.keepAlive = keepAlive;
+
 		if( keepAlive ) {
 			if( !retryTimer ) {
 				retryTimer = new Timer(reconnectTimerDelay, 1);
@@ -199,9 +205,10 @@ public class TypedDataSocket {
 
 	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 1): void {
 		var sendData: ByteArray = new ByteArray();
-		sendData.writeUnsignedInt(data.length);
 		sendData.writeUnsignedInt(format);
 		sendData.writeUnsignedInt(type);
+		if( format != FORMAT_EMPTY && format != FORMAT_POOLING && format != FORMAT_INT)
+			sendData.writeUnsignedInt(data.length);
 		data.position = 0;
 		sendData.writeBytes(data);
 
@@ -213,14 +220,15 @@ public class TypedDataSocket {
 
 	public function sendEmpty(type: uint): void {
 		var sendData: ByteArray = new ByteArray();
-		sendData.writeUnsignedInt(0); // message length is 0
 		sendData.writeUnsignedInt(FORMAT_EMPTY);
 		sendData.writeUnsignedInt(type);
+		sendData.writeUnsignedInt(0); // message length is 0
 
 		sendData.position = 0;
 		socket.writeBytes(sendData);
 		socket.flush();
 	}
+
 
 
 
@@ -299,90 +307,106 @@ public class TypedDataSocket {
 	}
 
 
+
 	private function onClientSocketData(event: ProgressEvent): void {
 		var clientSocket: Socket = event.target as Socket;
 
 //		if(clientSocket.bytesAvailable < 8 ) {
 //			Log.debug('package to small');
 //		}
-		// 4 bytes for message length + 4 bytes for messageFormat + 4 bytes for messageType
-		while ( clientSocket.bytesAvailable >= 12 ) {
-			// is it a new Message?
-			if( newMessage ) {
-				receivingMessageLength = clientSocket.readUnsignedInt();
-				receivingMessageFormat = clientSocket.readUnsignedInt();
-				receivingMessageType = clientSocket.readUnsignedInt();
-				newMessage = false;
-
-//				Log.debug('receiving new message with type '+ receivingMessageFormat + ' and length ' + receivingMessageLength);
-			}
-			// is there a full message in this packet?
-			if( receivingMessageLength <= clientSocket.bytesAvailable) {
-//				Log.debug('received new message with type '+ receivingMessageFormat);
-
-				var data: *;
-
-				if( receivingMessageFormat != FORMAT_EMPTY) {
-					var bytes: ByteArray = new ByteArray();
-
-					clientSocket.readBytes(bytes, 0, receivingMessageLength);
-					bytes.position = 0;
-
-					if( receivingMessageFormat == FORMAT_BYTES) {
-						data = bytes;
-					}
-					else if( receivingMessageFormat == FORMAT_STRING) {
-						data = bytes.readUTF();
-					}
-					else if( receivingMessageFormat == FORMAT_INT ) {
-						data = bytes.readInt();
-					}
-					// is receiving type serializable?
-					else if( receivingMessageFormat >= FORMAT_OBJECT ) {
-						data = bytes.readObject();
-					}
-					else {
-						data = bytes;
-						trace("TypedDataSocket->onClientSocketData() [265]:: Received data with unknown format!" );
-					}
-				}
 
 
-				// dispatch for all
-				signalDataReceiveComplete.dispatch(this, data, receivingMessageFormat, receivingMessageType);
+		if( receivingMessageFormat < 0 ) {
+			if( clientSocket.bytesAvailable < 4)
+				return;
 
-				// dispatch for instances which listen just for a specific type
-				if( type_to_signal ) {
-					var signal: Signal = type_to_signal[receivingMessageType] as Signal;
-					if( signal ) {
-						signal.dispatch(this, data, receivingMessageFormat, receivingMessageType);
-					}
-				}
-
-				receivingMessageLength = 0;
-				receivingMessageFormat = 0;
-				receivingMessageType = 0;
-				newMessage = true;
-			}
-			// is message loading in progress?
-			else {
-//				Log.debug('EasySocket -> onClientSocketData(): waiting for next package');
-				if(receivingMessageLength > 0) {
-					signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
-
-					// dispatch for instances which listen just for a specific type
-					if( type_to_progressSignal ) {
-						var signal: Signal = type_to_progressSignal[receivingMessageType];
-						if( signal)
-							signal.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength);
-					}
-				}
-
-				break;
+			receivingMessageFormat = clientSocket.readUnsignedInt();
+			if( receivingMessageFormat == FORMAT_POOLING ) {
+				receivingMessageFormat = -1;
+				return;
 			}
 
+			if( clientSocket.bytesAvailable >= 4) {
+				if( receivingMessageFormat == FORMAT_POOLING ) {
+					receivingMessageFormat = -1;
+					return;
+				}
+			}
 		}
 
+		// FORMAT is resolved. Checking for TYPE
+		if( receivingMessageType < 0 ) {
+
+			// enough data to resolve type?
+			if( clientSocket.bytesAvailable < 4)
+				return;
+
+			receivingMessageType = clientSocket.readUnsignedInt();
+		}
+
+		if( receivingMessageFormat == FORMAT_EMPTY) {
+			dispatchMessage(null, receivingMessageFormat, receivingMessageType);
+			receivingMessageFormat = -1;
+			receivingMessageType = -1;
+			return;
+		}
+		else if( receivingMessageFormat == FORMAT_INT) {
+			if( clientSocket.bytesAvailable >= 4) {
+				dispatchMessage(clientSocket.readInt(), receivingMessageFormat, receivingMessageType)
+				receivingMessageFormat = -1;
+				receivingMessageType = -1;
+				return;
+			}
+		}
+		else {
+			if( receivingMessageLength <= 0 ) {
+
+				// enough byte available to res messageLength?
+				if( clientSocket.bytesAvailable < 4)
+					return;
+
+				receivingMessageLength = clientSocket.readUnsignedInt();
+			}
+
+			if( receivingMessageLength > clientSocket.bytesAvailable) {
+				signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
+
+				// dispatch for instances which listen just for a specific type
+				if( type_to_progressSignal ) {
+					var signal: Signal = type_to_progressSignal[receivingMessageType];
+					if( signal)
+						signal.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
+				}
+			}
+			else {
+				var bytes: ByteArray = new ByteArray();
+				clientSocket.readBytes(bytes, 0, receivingMessageLength);
+				bytes.position = 0;
+				var data: Object;
+				if( receivingMessageFormat == FORMAT_STRING )
+					data = bytes.readUTF();
+				else
+					data = bytes.readObject();
+				dispatchMessage(data, receivingMessageFormat, receivingMessageType);
+				receivingMessageFormat = -1;
+				receivingMessageType = -1;
+				receivingMessageLength = 0;
+			}
+		}
+	}
+
+
+	protected function dispatchMessage(data: *, format: uint, type: uint): void {
+		// dispatch for all
+		signalDataReceiveComplete.dispatch(this, data, format, type);
+
+		// dispatch for instances which listen just for a specific type
+		if( type_to_signal ) {
+			var signal: Signal = type_to_signal[type] as Signal;
+			if( signal ) {
+				signal.dispatch(this, data, format, type);
+			}
+		}
 	}
 
 
