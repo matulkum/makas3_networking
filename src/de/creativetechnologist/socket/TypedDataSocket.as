@@ -52,6 +52,9 @@ public class TypedDataSocket {
 	// (this, data:Object, format:uint, type:String)
 	public var signalDataReceiveComplete: Signal;
 
+	protected var poolingTimer: Timer;
+	protected var poolingData: ByteArray;
+
 	public static const EVENT_CONNECTED: String = "EVENT_CONNECTED";
 	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
 	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
@@ -110,6 +113,12 @@ public class TypedDataSocket {
 			retryTimer.stop();
 			retryTimer.removeEventListener(TimerEvent.TIMER, onRetryTimer);
 			keepAlive = false;
+		}
+
+		if( poolingTimer ) {
+			poolingTimer.reset();
+			poolingTimer.removeEventListener(TimerEvent.TIMER, onPoolingTimer);
+			poolingTimer = null;
 		}
 	}
 
@@ -230,6 +239,29 @@ public class TypedDataSocket {
 	}
 
 
+	public function startPooling(ms: int = 3000): void {
+		if( !poolingTimer ) {
+			poolingTimer = new Timer(ms);
+			poolingTimer.addEventListener(TimerEvent.TIMER, onPoolingTimer);
+
+			poolingData = new ByteArray();
+			poolingData.writeUnsignedInt(FORMAT_POOLING);
+		}
+		else {
+			poolingTimer.reset();
+			poolingTimer.delay = ms;
+		}
+		poolingTimer.start();
+	}
+
+
+	private function onPoolingTimer(event: TimerEvent): void {
+		if( connected ) {
+			poolingData.position = 0;
+			socket.writeBytes(poolingData);
+			socket.flush();
+		}
+	}
 
 
 	public function addListenerForType(type: uint, listener: Function): void {
@@ -322,6 +354,7 @@ public class TypedDataSocket {
 
 			receivingMessageFormat = clientSocket.readUnsignedInt();
 			if( receivingMessageFormat == FORMAT_POOLING ) {
+				trace('received pooling!');
 				receivingMessageFormat = -1;
 				return;
 			}
