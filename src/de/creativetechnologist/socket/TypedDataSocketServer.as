@@ -28,7 +28,7 @@ public class TypedDataSocketServer {
 		signalClientSocketConnect = new Signal(TypedDataSocketServer, TypedDataSocket);
 	}
 
-
+	// disposing
 	public function dispose(): void {
 		disposeClients();
 		disposeServerSocket();
@@ -54,7 +54,31 @@ public class TypedDataSocketServer {
 	}
 
 
+	// sending
+	public function sendIntToAll(value: int, type: uint = 0): void {
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].sendInt(value, type);
+		}
+	}
+	public function sendStringToAll(string: String, type: uint = 0): void {
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].sendString(string, type);
+		}
+	}
+	public function sendObjectToAll(data: Object, type: uint = 0): void {
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].sendObject(data, type);
+		}
+	}
 
+
+	// listeners
 	public function addListenerForGlobalType(type: uint, listener: Function): void {
 		if( !type_2_listenerVector ) {
 			type_2_listenerVector = new Dictionary();
@@ -95,6 +119,7 @@ public class TypedDataSocketServer {
 	}
 
 
+	// start listening
 	public function listen(localPort: int): void {
 
 		this.localPort = localPort;
@@ -115,7 +140,7 @@ public class TypedDataSocketServer {
 	}
 
 
-
+	// privates
 	private function removeClientSocket(typedDataSocket: TypedDataSocket): void {
 		var index: int = clientSockets.indexOf(typedDataSocket);
 		if( index > -1) {

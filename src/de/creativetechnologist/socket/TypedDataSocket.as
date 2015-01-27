@@ -175,18 +175,6 @@ public class TypedDataSocket {
 	}
 
 
-	public function sendObject(data: Object, type: uint = 0): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendObject() :: Socket not connected" );
-			return;
-		}
-		var bytes: ByteArray = new ByteArray();
-		bytes.writeObject(data);
-		bytes.position = 0;
-		sendBytes(bytes, type, FORMAT_OBJECT);
-	}
-
-
 	public function sendInt(value: int, type: uint = 0): void {
 		if( !socket || !socket.connected) {
 			trace("TypedDataSocket->sendInt() :: Socket not connected" );
@@ -209,6 +197,18 @@ public class TypedDataSocket {
 		bytes.writeUTF(string);
 		bytes.position = 0;
 		sendBytes(bytes, type, FORMAT_STRING);
+	}
+
+
+	public function sendObject(data: Object, type: uint = 0): void {
+		if( !socket || !socket.connected) {
+			trace("TypedDataSocket->sendObject() :: Socket not connected" );
+			return;
+		}
+		var bytes: ByteArray = new ByteArray();
+		bytes.writeObject(data);
+		bytes.position = 0;
+		sendBytes(bytes, type, FORMAT_OBJECT);
 	}
 
 
