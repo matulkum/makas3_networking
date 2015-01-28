@@ -8,25 +8,25 @@ import flash.utils.Dictionary;
 
 import org.osflash.signals.Signal;
 
-public class TypedDataSocketServer {
+public class TypedTCPSocketServer {
 
 	private var localPort: int;
 
 	private var serverSocket: ServerSocket;
-	private var clientSockets: Vector.<TypedDataSocket>;
+	private var clientSockets: Vector.<TypedTCPSocket>;
 
 	private var globalListeners: Vector.<Function>;
 	private var type_2_listenerVector: Dictionary;
 
-	// (this, socket:TypedDataSocket)
+	// (this, socket:typedTCPSocket)
 	public var signalClientSocketConnect: Signal;
 
 
 
 
-	public function TypedDataSocketServer() {
-		clientSockets = new <TypedDataSocket>[];
-		signalClientSocketConnect = new Signal(TypedDataSocketServer, TypedDataSocket);
+	public function TypedTCPSocketServer() {
+		clientSockets = new <TypedTCPSocket>[];
+		signalClientSocketConnect = new Signal(TypedTCPSocketServer, TypedTCPSocket);
 	}
 
 
@@ -42,7 +42,7 @@ public class TypedDataSocketServer {
 
 	protected function disposeClients(): void {
 		if( clientSockets ) {
-			for each (var socket: TypedDataSocket in clientSockets) {
+			for each (var socket: TypedTCPSocket in clientSockets) {
 				socket.dispose();
 			}
 			clientSockets.length = 0;
@@ -187,27 +187,27 @@ public class TypedDataSocketServer {
 
 	// privates
 
-	private function removeClientSocket(typedDataSocket: TypedDataSocket): void {
-		var index: int = clientSockets.indexOf(typedDataSocket);
+	private function removeClientSocket(typedTCPSocket: TypedTCPSocket): void {
+		var index: int = clientSockets.indexOf(typedTCPSocket);
 		if( index > -1) {
 			clientSockets.splice(index, 1);
-			typedDataSocket.signalConnection.remove(onTypedDataSocketConnection);
-//			typedDataSocket.signalDataReceiveComplete.remove(onTypedDataSocketDataReceived);
+			typedTCPSocket.signalConnection.remove(ontypedTCPSocketConnection);
+//			typedTCPSocket.signalDataReceiveComplete.remove(ontypedTCPSocketDataReceived);
 		}
-		typedDataSocket.dispose();
+		typedTCPSocket.dispose();
 	}
 
 
 	private function onServerSocketConnect(event: ServerSocketConnectEvent): void {
-		var typedDataSocket: TypedDataSocket = new TypedDataSocket(event.socket);
-		typedDataSocket.signalConnection.add(onTypedDataSocketConnection);
+		var typedTCPSocket: TypedTCPSocket = new TypedTCPSocket(event.socket);
+		typedTCPSocket.signalConnection.add(ontypedTCPSocketConnection);
 
-		clientSockets.push(typedDataSocket);
+		clientSockets.push(typedTCPSocket);
 
 		// adding global listerners
 		if( globalListeners ) {
 			for each( var listener: Function in globalListeners)
-				typedDataSocket.signalDataReceiveComplete.add(listener);
+				typedTCPSocket.signalDataReceiveComplete.add(listener);
 		}
 
 		// adding typed listerners
@@ -216,21 +216,21 @@ public class TypedDataSocketServer {
 				var listenerVector: Vector.<Function> = type_2_listenerVector[type];
 				if( listenerVector ) {
 					for each (var listener: Function in listenerVector) {
-						typedDataSocket.addListenerForType(type, listener);
+						typedTCPSocket.addListenerForType(type, listener);
 					}
 				}
 			}
 		}
-		signalClientSocketConnect.dispatch(this, typedDataSocket);
+		signalClientSocketConnect.dispatch(this, typedTCPSocket);
 	}
 
 
-	private function onTypedDataSocketConnection(target: TypedDataSocket, eventType: String): void {
-		if( eventType == TypedDataSocket.EVENT_CLOSED ) {
+	private function ontypedTCPSocketConnection(target: TypedTCPSocket, eventType: String): void {
+		if( eventType == TypedTCPSocket.EVENT_CLOSED ) {
 			removeClientSocket(target);
 		}
-		if( eventType == TypedDataSocket.EVENT_IOERROR ) {
-			trace("SignalServerSocket->onTypedDataSocketConnection() :: IOError" );
+		if( eventType == TypedTCPSocket.EVENT_IOERROR ) {
+			trace("SignalServerSocket->ontypedTCPSocketConnection() :: IOError" );
 		}
 	}
 }

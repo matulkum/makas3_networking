@@ -15,7 +15,7 @@ import flash.utils.Timer;
 
 import org.osflash.signals.Signal;
 
-public class TypedDataSocket {
+public class TypedTCPSocket {
 
 	public var reconnectTimerDelay: Number = 4000;
 
@@ -42,15 +42,17 @@ public class TypedDataSocket {
 	// [String] => Signal(this, ratio:Number, type:String)
 	private var type_to_progressSignal: Dictionary;
 
-	//TODO create getter
 	// (this, type: String)
 	public var signalConnection: Signal;
+	//TODO create getter
 
 	// (this, type:String, ratio:Number, type:String)
 	public var signalDataReceiveProgress: Signal;
+	//TODO create getter
 
 	// (this, data:Object, type:String)
 	public var signalDataReceiveComplete: Signal;
+	//TODO create getter
 
 	protected var poolingTimer: Timer;
 	protected var poolingData: ByteArray;
@@ -68,15 +70,15 @@ public class TypedDataSocket {
 
 
 
-	public function TypedDataSocket(socket: Socket = null) {
+	public function TypedTCPSocket(socket: Socket = null) {
 		this.socket = socket;
-		signalConnection = new Signal(TypedDataSocket, String);
+		signalConnection = new Signal(TypedTCPSocket, String);
 
 		// target, data, type
-		signalDataReceiveComplete = new Signal(TypedDataSocket, Object, uint);
+		signalDataReceiveComplete = new Signal(TypedTCPSocket, Object, uint);
 
 		// target, ratio, type
-		signalDataReceiveProgress = new Signal(TypedDataSocket, Number, uint);
+		signalDataReceiveProgress = new Signal(TypedTCPSocket, Number, uint);
 
 		if( socket )
 			addSocketListener();
@@ -130,7 +132,7 @@ public class TypedDataSocket {
 	 *
 	 * @param remoteHost
 	 * @param remotePort
-	 * @param keepAlive If true retries connection if connection attemp fails and reconnect  on disconnect
+	 * @param keepAlive If true retries connection if connection attempt fails and reconnect  on disconnect
 	 * @return False if socket could not be opened
 	 */
 	public function connect(remoteHost: String, remotePort: int, keepAlive: Boolean = true): Boolean {
@@ -418,7 +420,7 @@ public class TypedDataSocket {
 			// do we need to read the messageLength
 			if( receivingMessageLength <= 0 ) {
 
-				// enough bytes available to read messageLength?
+				// if not enough bytes available to read messageLength
 				if( clientSocket.bytesAvailable < 4)
 					return;
 				receivingMessageLength = clientSocket.readUnsignedInt();
