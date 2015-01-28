@@ -15,6 +15,7 @@ public class TypedDataSocketServer {
 	private var serverSocket: ServerSocket;
 	private var clientSockets: Vector.<TypedDataSocket>;
 
+	private var globalListeners: Vector.<Function>;
 	private var type_2_listenerVector: Dictionary;
 
 	// (this, socket:TypedDataSocket)
@@ -28,11 +29,14 @@ public class TypedDataSocketServer {
 		signalClientSocketConnect = new Signal(TypedDataSocketServer, TypedDataSocket);
 	}
 
+
 	// disposing
+
 	public function dispose(): void {
 		disposeClients();
 		disposeServerSocket();
 		type_2_listenerVector = null;
+		globalListeners.length = 0;
 	}
 
 
@@ -55,6 +59,7 @@ public class TypedDataSocketServer {
 
 
 	// sending
+
 	public function sendIntToAll(value: int, type: uint = 0): void {
 		var i: int;
 		var length: int = clientSockets.length;
@@ -88,6 +93,36 @@ public class TypedDataSocketServer {
 
 
 	// listeners
+
+	public function addGlobalListener(listener: Function): void {
+		if( !globalListeners )
+			globalListeners = new <Function>[listener];
+		else
+			globalListeners.push(listener);
+
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].signalDataReceiveComplete.add(listener);
+		}
+	}
+
+	public function removeGlobalListener(listener: Function): void {
+
+		if( globalListeners ) {
+			var index: int = globalListeners.indexOf(listener);
+			if( index >= -1)
+				globalListeners.splice(index, 1);
+		}
+
+		var i: int;
+		var length: int = clientSockets.length;
+		for (i = 0; i < length; i++) {
+			clientSockets[i].signalDataReceiveComplete.remove(listener);
+		}
+	}
+
+
 	public function addListenerForGlobalType(type: uint, listener: Function): void {
 		if( !type_2_listenerVector ) {
 			type_2_listenerVector = new Dictionary();
@@ -129,6 +164,7 @@ public class TypedDataSocketServer {
 
 
 	// start listening
+
 	public function listen(localPort: int): void {
 
 		this.localPort = localPort;
@@ -150,6 +186,7 @@ public class TypedDataSocketServer {
 
 
 	// privates
+
 	private function removeClientSocket(typedDataSocket: TypedDataSocket): void {
 		var index: int = clientSockets.indexOf(typedDataSocket);
 		if( index > -1) {
@@ -167,6 +204,13 @@ public class TypedDataSocketServer {
 
 		clientSockets.push(typedDataSocket);
 
+		// adding global listerners
+		if( globalListeners ) {
+			for each( var listener: Function in globalListeners)
+				typedDataSocket.signalDataReceiveComplete.add(listener);
+		}
+
+		// adding typed listerners
 		if( type_2_listenerVector ) {
 			for(var type: uint in type_2_listenerVector) {
 				var listenerVector: Vector.<Function> = type_2_listenerVector[type];
@@ -189,10 +233,5 @@ public class TypedDataSocketServer {
 			trace("SignalServerSocket->onTypedDataSocketConnection() :: IOError" );
 		}
 	}
-
-
-//	private function onTypedDataSocketDataReceived(target: TypedDataSocket, data: Object, format: uint, type: uint): void {
-//	}
-
 }
 }
