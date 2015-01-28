@@ -215,7 +215,7 @@ public class TypedDataSocket {
 	}
 
 
-	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 1): void {
+	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 2): void {
 		if( !socket || !socket.connected) {
 			trace("TypedDataSocket->sendString() :: Socket not connected" );
 			return;
@@ -254,7 +254,7 @@ public class TypedDataSocket {
 
 
 	/**
-	 * Sends an message (which is ignored by the receiver) in a specified intervall
+	 * Sends an empty message (which is ignored by the receiver) in a specified interval
 	 * @param ms Intervall delay in milliSeconds
 	 */
 	public function startPooling(ms: int = 3000): void {
@@ -418,16 +418,16 @@ public class TypedDataSocket {
 			// do we need to read the messageLength
 			if( receivingMessageLength <= 0 ) {
 
-				// enough byte available to res messageLength?
+				// enough bytes available to read messageLength?
 				if( clientSocket.bytesAvailable < 4)
 					return;
 				receivingMessageLength = clientSocket.readUnsignedInt();
 			}
 
-			// if there is not all bytes of the message yet
+			// if there is not enough bytes to read the full message yet
 			if( receivingMessageLength > clientSocket.bytesAvailable) {
 
-				// dispathc progress
+				// dispatch progress
 				signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageType);
 
 				// dispatch for instances which listen just for a specific type
@@ -442,11 +442,16 @@ public class TypedDataSocket {
 				var bytes: ByteArray = new ByteArray();
 				clientSocket.readBytes(bytes, 0, receivingMessageLength);
 				bytes.position = 0;
+
 				var data: Object;
-				if( receivingMessageFormat == FORMAT_STRING )
+				if( receivingMessageFormat == FORMAT_BYTES) {
+					data = bytes;
+				}
+				else if( receivingMessageFormat == FORMAT_STRING )
 					data = bytes.readUTF();
 				else
 					data = bytes.readObject();
+
 				dispatchMessage(data, receivingMessageFormat, receivingMessageType);
 				receivingMessageFormat = -1;
 				receivingMessageType = -1;
