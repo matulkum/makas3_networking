@@ -37,16 +37,16 @@ public class TypedDataSocket {
 	private var receivingMessageFormat: int = -1;
 	private var receivingMessageType: int = -1;
 
-	// [String] => Signal(this, data:*)
+	// [String] => Signal(this, data:*, format:uint, type:String)
 	private var type_to_signal: Dictionary;
-	// [String] => Signal(this, ratio:Number)
+	// [String] => Signal(this, ratio:Number, format:uint, type:String)
 	private var type_to_progressSignal: Dictionary;
 
 	//TODO create getter
 	// (this, type: String)
 	public var signalConnection: Signal;
 
-	// (this, type:String, ratio:Number)
+	// (this, type:String, ratio:Number, format:uint, type:String)
 	public var signalDataReceiveProgress: Signal;
 
 	// (this, data:Object, format:uint, type:String)
