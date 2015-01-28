@@ -37,19 +37,19 @@ public class TypedDataSocket {
 	private var receivingMessageFormat: int = -1;
 	private var receivingMessageType: int = -1;
 
-	// [String] => Signal(this, data:*, format:uint, type:String)
+	// [String] => Signal(this, data:*, type:String)
 	private var type_to_signal: Dictionary;
-	// [String] => Signal(this, ratio:Number, format:uint, type:String)
+	// [String] => Signal(this, ratio:Number, type:String)
 	private var type_to_progressSignal: Dictionary;
 
 	//TODO create getter
 	// (this, type: String)
 	public var signalConnection: Signal;
 
-	// (this, type:String, ratio:Number, format:uint, type:String)
+	// (this, type:String, ratio:Number, type:String)
 	public var signalDataReceiveProgress: Signal;
 
-	// (this, data:Object, format:uint, type:String)
+	// (this, data:Object, type:String)
 	public var signalDataReceiveComplete: Signal;
 
 	protected var poolingTimer: Timer;
@@ -72,11 +72,11 @@ public class TypedDataSocket {
 		this.socket = socket;
 		signalConnection = new Signal(TypedDataSocket, String);
 
-		// target, data, format, type
-		signalDataReceiveComplete = new Signal(TypedDataSocket, Object, uint, uint);
+		// target, data, type
+		signalDataReceiveComplete = new Signal(TypedDataSocket, Object, uint);
 
-		// target, ratio, format, type
-		signalDataReceiveProgress = new Signal(TypedDataSocket, Number, uint, uint);
+		// target, ratio, type
+		signalDataReceiveProgress = new Signal(TypedDataSocket, Number, uint);
 
 		if( socket )
 			addSocketListener();
@@ -428,13 +428,13 @@ public class TypedDataSocket {
 			if( receivingMessageLength > clientSocket.bytesAvailable) {
 
 				// dispathc progress
-				signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
+				signalDataReceiveProgress.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageType);
 
 				// dispatch for instances which listen just for a specific type
 				if( type_to_progressSignal ) {
 					var signal: Signal = type_to_progressSignal[receivingMessageType];
 					if( signal)
-						signal.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageFormat, receivingMessageType);
+						signal.dispatch(this, clientSocket.bytesAvailable / receivingMessageLength, receivingMessageType);
 				}
 			}
 			// else a whole message is available in the clientSocket
@@ -458,13 +458,13 @@ public class TypedDataSocket {
 
 	protected function dispatchMessage(data: *, format: uint, type: uint): void {
 		// dispatch for all
-		signalDataReceiveComplete.dispatch(this, data, format, type);
+		signalDataReceiveComplete.dispatch(this, data, type);
 
 		// dispatch for instances which listen just for a specific type
 		if( type_to_signal ) {
 			var signal: Signal = type_to_signal[type] as Signal;
 			if( signal ) {
-				signal.dispatch(this, data, format, type);
+				signal.dispatch(this, data, type);
 			}
 		}
 	}
