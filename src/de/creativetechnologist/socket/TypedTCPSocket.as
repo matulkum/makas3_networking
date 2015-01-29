@@ -375,16 +375,10 @@ public class TypedTCPSocket {
 
 			receivingMessageFormat = clientSocket.readUnsignedInt();
 			if( receivingMessageFormat == FORMAT_POOLING ) {
-				trace('received pooling!');
 				receivingMessageFormat = -1;
+				if( clientSocket.bytesAvailable )
+					onClientSocketData(event);
 				return;
-			}
-
-			if( clientSocket.bytesAvailable >= 4) {
-				if( receivingMessageFormat == FORMAT_POOLING ) {
-					receivingMessageFormat = -1;
-					return;
-				}
 			}
 		}
 
@@ -404,6 +398,8 @@ public class TypedTCPSocket {
 			dispatchMessage(null, receivingMessageFormat, receivingMessageType);
 			receivingMessageFormat = -1;
 			receivingMessageType = -1;
+			if( clientSocket.bytesAvailable )
+				onClientSocketData(event);
 			return;
 		}
 		// is FORMAT_INT ?
@@ -412,6 +408,8 @@ public class TypedTCPSocket {
 				dispatchMessage(clientSocket.readInt(), receivingMessageFormat, receivingMessageType)
 				receivingMessageFormat = -1;
 				receivingMessageType = -1;
+				if( clientSocket.bytesAvailable )
+					onClientSocketData(event);
 				return;
 			}
 		}
@@ -458,6 +456,8 @@ public class TypedTCPSocket {
 				receivingMessageFormat = -1;
 				receivingMessageType = -1;
 				receivingMessageLength = 0;
+				if( clientSocket.bytesAvailable )
+					onClientSocketData(event);
 			}
 		}
 	}
