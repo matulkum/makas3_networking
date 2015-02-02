@@ -2,9 +2,12 @@
  * Created by mak on 20.08.14.
  */
 package de.creativetechnologist.socket {
+import flash.events.Event;
 import flash.events.ServerSocketConnectEvent;
+import flash.events.TimerEvent;
 import flash.net.ServerSocket;
 import flash.utils.Dictionary;
+import flash.utils.Timer;
 
 import org.osflash.signals.Signal;
 
@@ -17,6 +20,9 @@ public class TypedTCPSocketServer {
 
 	private var globalListeners: Vector.<Function>;
 	private var type_2_listenerVector: Dictionary;
+
+	private var retryOnErrorTimer: Timer;
+	private var retryOnErrorDelay: Number = 3000;
 
 	// (this, socket:typedTCPSocket)
 	public var signalClientSocketConnect: Signal;
@@ -37,6 +43,18 @@ public class TypedTCPSocketServer {
 		disposeServerSocket();
 		type_2_listenerVector = null;
 		globalListeners.length = 0;
+
+		disposeRetryOnErrorTimer();
+	}
+
+
+	public function disposeRetryOnErrorTimer(): void {
+		if (retryOnErrorTimer) {
+			retryOnErrorTimer.stop();
+			retryOnErrorTimer.reset();
+			retryOnErrorTimer.removeEventListener(TimerEvent.TIMER_COMPLETE, onRetryOnErrorTimer);
+			retryOnErrorTimer = null;
+		}
 	}
 
 
@@ -53,6 +71,7 @@ public class TypedTCPSocketServer {
 		if (serverSocket) {
 			try {serverSocket.close();}
 			catch (e: Error) {}
+			serverSocket.removeEventListener(ServerSocketConnectEvent.CONNECT, onServerSocketConnect);
 			serverSocket = null;
 		}
 	}
@@ -165,13 +184,14 @@ public class TypedTCPSocketServer {
 
 	// start listening
 
-	public function listen(localPort: int): void {
-
+	public function listen(localPort: int, retryOnError: Boolean = false): void {
 		this.localPort = localPort;
 
 //		Log.info('SignalSocketServer -> init()');
 
-		disposeServerSocket()
+		disposeServerSocket();
+		if( !retryOnError )
+			disposeRetryOnErrorTimer();
 		serverSocket = new ServerSocket();
 
 		try {
@@ -181,11 +201,26 @@ public class TypedTCPSocketServer {
 		}
 		catch(e: Error) {
 			trace("SignalServerSocket->init() ::", e.toString() );
+			if( retryOnError ) {
+				if( !retryOnErrorTimer ) {
+					retryOnErrorTimer = new Timer(retryOnErrorDelay, 1);
+					retryOnErrorTimer.addEventListener(TimerEvent.TIMER_COMPLETE, onRetryOnErrorTimer);
+				}
+				else
+					retryOnErrorTimer.reset();
+				retryOnErrorTimer.start();
+			}
 		}
 	}
 
 
+
 	// privates
+
+
+	private function onRetryOnErrorTimer(event: TimerEvent): void {
+		listen(localPort, true);
+	}
 
 	private function removeClientSocket(typedTCPSocket: TypedTCPSocket): void {
 		var index: int = clientSockets.indexOf(typedTCPSocket);
@@ -199,6 +234,7 @@ public class TypedTCPSocketServer {
 
 
 	private function onServerSocketConnect(event: ServerSocketConnectEvent): void {
+
 		var typedTCPSocket: TypedTCPSocket = new TypedTCPSocket(event.socket);
 		typedTCPSocket.signalConnection.add(ontypedTCPSocketConnection);
 
