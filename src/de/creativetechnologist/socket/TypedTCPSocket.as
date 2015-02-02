@@ -4,9 +4,11 @@
 package de.creativetechnologist.socket {
 
 
+import flash.errors.IOError;
 import flash.events.Event;
 import flash.events.IOErrorEvent;
 import flash.events.ProgressEvent;
+import flash.events.SecurityErrorEvent;
 import flash.events.TimerEvent;
 import flash.net.Socket;
 import flash.utils.ByteArray;
@@ -60,6 +62,7 @@ public class TypedTCPSocket {
 	public static const EVENT_CONNECTED: String = "EVENT_CONNECTED";
 	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
 	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
+	public static const EVENT_SECURITYERROR: String = 'EVENT_SECURITYERROR';
 
 	public static const FORMAT_EMPTY : uint = 1;
 	public static const FORMAT_BYTES : uint = 2;
@@ -81,13 +84,13 @@ public class TypedTCPSocket {
 		signalDataReceiveProgress = new Signal(TypedTCPSocket, Number, uint);
 
 		if( socket )
-			addSocketListener();
+			addSocketListener(socket);
 	}
 
 
 	public function dispose(): void {
 		if( socket ) {
-			removeSocketListeners();
+			removeSocketListeners(socket);
 			try {
 				socket.close();
 			}
@@ -158,7 +161,7 @@ public class TypedTCPSocket {
 		if(socket) {
 			if( socket.connected )
 				socket.close();
-			removeSocketListeners();
+			removeSocketListeners(socket);
 			socket = null;
 		}
 
@@ -167,10 +170,10 @@ public class TypedTCPSocket {
 
 		try {
 			socket = new Socket();
-			addSocketListener();
+			addSocketListener(socket);
 			socket.connect(remoteHost, remotePort);
 		}
-		catch (e: Error) {
+		catch (e: IOError) {
 			trace(e.toString());
 			return false;
 		}
@@ -338,19 +341,21 @@ public class TypedTCPSocket {
 
 
 
-	private function addSocketListener(): void {
+	private function addSocketListener(socket: Socket): void {
 		socket.addEventListener(Event.CONNECT, onSocketConnect);
 		socket.addEventListener(Event.CLOSE, onSocketClose);
 		socket.addEventListener(ProgressEvent.SOCKET_DATA, onClientSocketData);
 		socket.addEventListener(IOErrorEvent.IO_ERROR, onSocketError);
+		socket.addEventListener(SecurityErrorEvent.SECURITY_ERROR, onSocketError);
 	}
 
 
-	private function removeSocketListeners(): void {
+	private function removeSocketListeners(socket: Socket): void {
 		socket.removeEventListener(Event.CONNECT, onSocketConnect);
 		socket.removeEventListener(Event.CLOSE, onSocketClose);
 		socket.removeEventListener(ProgressEvent.SOCKET_DATA, onClientSocketData);
 		socket.removeEventListener(IOErrorEvent.IO_ERROR, onSocketError);
+		socket.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, onSocketError);
 	}
 
 
@@ -498,9 +503,12 @@ public class TypedTCPSocket {
 	}
 
 
-	private function onSocketError(event: IOErrorEvent): void {
+	private function onSocketError(event: *): void {
 //		Log.info('EasySocket -> onSocketError()');
-		signalConnection.dispatch(this, EVENT_IOERROR);
+		if( event is IOErrorEvent)
+			signalConnection.dispatch(this, EVENT_IOERROR);
+		else if( event is SecurityErrorEvent)
+			signalConnection.dispatch(this, EVENT_SECURITYERROR);
 	}
 
 }
