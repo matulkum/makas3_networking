@@ -3,7 +3,6 @@
  */
 package de.creativetechnologist.socket {
 
-
 import flash.errors.IOError;
 import flash.events.Event;
 import flash.events.IOErrorEvent;
@@ -14,6 +13,9 @@ import flash.net.Socket;
 import flash.utils.ByteArray;
 import flash.utils.Dictionary;
 import flash.utils.Timer;
+import flash.utils.clearTimeout;
+import flash.utils.getTimer;
+import flash.utils.setTimeout;
 
 import org.osflash.signals.Signal;
 
@@ -30,8 +32,10 @@ public class TypedTCPSocket {
 	public function get remoteHost(): String{ return _remoteHost ;}
 
 	private var keepAlive: Boolean;
+	private var retryTimeoutID: uint;
+	private var lastConnectionAttempTime: int;
 
-	private var retryTimer: Timer;
+//	private var retryTimer: Timer;
 
 	private var isInit: Boolean;
 
@@ -59,10 +63,7 @@ public class TypedTCPSocket {
 	protected var poolingTimer: Timer;
 	protected var poolingData: ByteArray;
 
-	public static const EVENT_CONNECTED: String = "EVENT_CONNECTED";
-	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
-	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
-	public static const EVENT_SECURITYERROR: String = 'EVENT_SECURITYERROR';
+	private const RETRY_DELAY: int = 5000;
 
 	public static const FORMAT_EMPTY : uint = 1;
 	public static const FORMAT_BYTES : uint = 2;
@@ -70,6 +71,11 @@ public class TypedTCPSocket {
 	public static const FORMAT_INT : uint = 4;
 	public static const FORMAT_OBJECT : uint = 10;
 	public static const FORMAT_POOLING : uint = 100;
+
+	public static const EVENT_CONNECTED: String = "EVENT_CONNECTED";
+	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
+	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
+	public static const EVENT_SECURITYERROR: String = 'EVENT_SECURITYERROR';
 
 
 
@@ -89,15 +95,7 @@ public class TypedTCPSocket {
 
 
 	public function dispose(): void {
-		if( socket ) {
-			removeSocketListeners(socket);
-			try {
-				socket.close();
-			}
-			catch(e: Error) {}
-			socket = null;
-		}
-
+		disposeSocket();
 		var type: String;
 		if( type_to_signal ) {
 			for( type in type_to_signal )
@@ -110,17 +108,31 @@ public class TypedTCPSocket {
 			type_to_progressSignal = null;
 		}
 
-		if( retryTimer ) {
-			retryTimer.stop();
-			retryTimer.removeEventListener(TimerEvent.TIMER, onRetryTimer);
-			keepAlive = false;
-		}
+//		if( retryTimer ) {
+//			retryTimer.stop();
+//			retryTimer.removeEventListener(TimerEvent.TIMER, onRetryTimer);
+//		}
+		keepAlive = false;
 
 		if( poolingTimer ) {
 			poolingTimer.reset();
 			poolingTimer.removeEventListener(TimerEvent.TIMER, onPoolingTimer);
 			poolingTimer = null;
 		}
+	}
+
+
+	private function disposeSocket(): void {
+		if (socket) {
+			removeSocketListeners(socket);
+			try {
+				socket.close();
+			}
+			catch (e: Error) {
+			}
+			socket = null;
+		}
+		clearTimeout(retryTimeoutID);
 	}
 
 
@@ -146,24 +158,20 @@ public class TypedTCPSocket {
 		receivingMessageLength = 0;
 
 		this.keepAlive = keepAlive;
+		lastConnectionAttempTime = getTimer();
 
-		if( keepAlive ) {
-			if( !retryTimer ) {
-				retryTimer = new Timer(reconnectTimerDelay, 1);
-				retryTimer.addEventListener(TimerEvent.TIMER, onRetryTimer);
-			}
-			else {
-				retryTimer.reset();
-			}
-		}
-		retryTimer.start();
+//		if( keepAlive ) {
+//			if( !retryTimer ) {
+//				retryTimer = new Timer(reconnectTimerDelay, 1);
+//				retryTimer.addEventListener(TimerEvent.TIMER, onRetryTimer);
+//			}
+//			else {
+//				retryTimer.reset();
+//			}
+//		}
+//		retryTimer.start();
 
-		if(socket) {
-			if( socket.connected )
-				socket.close();
-			removeSocketListeners(socket);
-			socket = null;
-		}
+		disposeSocket();
 
 		this._remoteHost = remoteHost;
 		this._remotePort = remotePort;
@@ -359,6 +367,7 @@ public class TypedTCPSocket {
 	}
 
 
+
 	private function onRetryTimer(event: TimerEvent): void {
 //		Log.debug('EasySocket -> onRetryTimer()');
 		connect( _remoteHost, _remotePort, keepAlive);
@@ -484,10 +493,10 @@ public class TypedTCPSocket {
 
 	private function onSocketConnect(event: Event): void {
 //		Log.info('EasySocket -> onSocketConnect()');
-		if( retryTimer ) {
-			retryTimer.stop();
-			retryTimer.reset();
-		}
+//		if( retryTimer ) {
+//			retryTimer.stop();
+//			retryTimer.reset();
+//		}
 
 
 		signalConnection.dispatch(this, EVENT_CONNECTED);
@@ -503,12 +512,22 @@ public class TypedTCPSocket {
 	}
 
 
+
 	private function onSocketError(event: *): void {
 //		Log.info('EasySocket -> onSocketError()');
 		if( event is IOErrorEvent)
 			signalConnection.dispatch(this, EVENT_IOERROR);
 		else if( event is SecurityErrorEvent)
 			signalConnection.dispatch(this, EVENT_SECURITYERROR);
+
+		if( keepAlive ) {
+			var pastTime: int = getTimer() - lastConnectionAttempTime;
+			if( pastTime >= RETRY_DELAY)
+				connect(remoteHost, remotePort, keepAlive);
+			else {
+				retryTimeoutID = setTimeout(connect, RETRY_DELAY - pastTime, remoteHost, remotePort, keepAlive);
+			}
+		}
 	}
 
 }
