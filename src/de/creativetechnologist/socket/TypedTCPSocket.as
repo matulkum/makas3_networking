@@ -19,14 +19,16 @@ import flash.utils.setTimeout;
 
 import org.osflash.signals.Signal;
 
-public class TypedTCPSocket {
+public class TypedTCPSocket implements ITypedTCPSocket {
 
 	public var reconnectTimerDelay: Number = 4000;
 
 	private var socket: Socket;
 
 	private var _remotePort: int;
-	public function get remotePort(): int {return _remotePort;}
+	public function get remotePort(): int {
+		return _remotePort;
+	}
 
 	private var _remoteHost: String;
 	public function get remoteHost(): String{ return _remoteHost ;}
@@ -68,7 +70,8 @@ public class TypedTCPSocket {
 	public static const FORMAT_EMPTY : uint = 1;
 	public static const FORMAT_BYTES : uint = 2;
 	public static const FORMAT_STRING : uint = 3;
-	public static const FORMAT_INT : uint = 4;
+	public static const FORMAT_INT : int = 4;
+	public static const FORMAT_UINT : uint = 5;
 	public static const FORMAT_OBJECT : uint = 10;
 	public static const FORMAT_POOLING : uint = 100;
 
@@ -76,11 +79,11 @@ public class TypedTCPSocket {
 	public static const EVENT_CLOSED: String = "EVENT_CLOSED";
 	public static const EVENT_IOERROR: String = "EVENT_IOERROR";
 	public static const EVENT_SECURITYERROR: String = 'EVENT_SECURITYERROR';
+	public static const EVENT_CREATESOCKETERROR: String = 'EVENT_CREATESOCKETERROR';
 
 
 
-	public function TypedTCPSocket(socket: Socket = null) {
-		this.socket = socket;
+	public function TypedTCPSocket(fromSocket: Socket = null) {
 		signalConnection = new Signal(TypedTCPSocket, String);
 
 		// target, data, type
@@ -89,21 +92,29 @@ public class TypedTCPSocket {
 		// target, ratio, type
 		signalDataReceiveProgress = new Signal(TypedTCPSocket, Number, uint);
 
-		if( socket )
-			addSocketListener(socket);
+		if( fromSocket ) {
+			this.socket = fromSocket;
+			addSocketListener(fromSocket);
+		}
 	}
 
 
+
+
 	public function dispose(): void {
+		signalConnection.removeAll();
+		signalDataReceiveProgress.removeAll();
+		signalDataReceiveComplete.removeAll();
 		disposeSocket();
+
 		var type: String;
-		if( type_to_signal ) {
-			for( type in type_to_signal )
+		if (type_to_signal) {
+			for (type in type_to_signal)
 				Signal(type_to_signal[type]).removeAll();
 			type_to_signal = null;
 		}
-		if( type_to_progressSignal ) {
-			for( type in type_to_progressSignal )
+		if (type_to_progressSignal) {
+			for (type in type_to_progressSignal)
 				Signal(type_to_progressSignal[type]).removeAll();
 			type_to_progressSignal = null;
 		}
@@ -114,7 +125,7 @@ public class TypedTCPSocket {
 //		}
 		keepAlive = false;
 
-		if( poolingTimer ) {
+		if (poolingTimer) {
 			poolingTimer.reset();
 			poolingTimer.removeEventListener(TimerEvent.TIMER, onPoolingTimer);
 			poolingTimer = null;
@@ -123,21 +134,16 @@ public class TypedTCPSocket {
 
 
 	private function disposeSocket(): void {
+		close();
 		if (socket) {
 			removeSocketListeners(socket);
-			try {
-				socket.close();
-			}
-			catch (e: Error) {
-			}
 			socket = null;
 		}
-		clearTimeout(retryTimeoutID);
 	}
 
 
 	public function get connected(): Boolean {
-		if( !socket )
+		if (!socket)
 			return false;
 		return socket.connected;
 	}
@@ -153,11 +159,11 @@ public class TypedTCPSocket {
 	public function connect(remoteHost: String, remotePort: int, keepAlive: Boolean = true): Boolean {
 //		Log.debug('SignalSenderSocket -> init()', remoteHost, remotePort);
 
+
 		receivingMessageFormat = -1;
 		receivingMessageType = -1;
 		receivingMessageLength = 0;
 
-		this.keepAlive = keepAlive;
 		lastConnectionAttempTime = getTimer();
 
 //		if( keepAlive ) {
@@ -171,14 +177,29 @@ public class TypedTCPSocket {
 //		}
 //		retryTimer.start();
 
-		disposeSocket();
+
+//		disposeSocket();
 
 		this._remoteHost = remoteHost;
 		this._remotePort = remotePort;
 
+		if( socket )
+			disposeSocket();
+
+		// disposeSocket() sets keepAlive flase, so we set it afterwards
+		this.keepAlive = keepAlive;
+
 		try {
 			socket = new Socket();
 			addSocketListener(socket);
+		}
+		catch (e: *) {
+			trace(e.toString());
+			onSocketError(null);
+			return false;
+		}
+
+		try {
 			socket.connect(remoteHost, remotePort);
 		}
 		catch (e: IOError) {
@@ -191,9 +212,23 @@ public class TypedTCPSocket {
 	}
 
 
+	public function close(): void {
+		if (socket) {
+			try {
+				socket.flush();
+				socket.close();
+			}
+			catch (e: Error) {
+			}
+		}
+		keepAlive = false;
+		clearTimeout(retryTimeoutID);
+	}
+
+
 	public function sendInt(value: int, type: uint = 0): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendInt() :: Socket not connected" );
+		if (!socket || !socket.connected) {
+			trace("TypedDataSocket->sendInt() :: Socket not connected");
 			return;
 		}
 		var bytes: ByteArray = new ByteArray();
@@ -202,11 +237,22 @@ public class TypedTCPSocket {
 		sendBytes(bytes, type, FORMAT_INT);
 
 	}
+	public function sendUInt(value: uint, type: uint = 0): void {
+		if (!socket || !socket.connected) {
+			trace("TypedDataSocket->sendInt() :: Socket not connected");
+			return;
+		}
+		var bytes: ByteArray = new ByteArray();
+		bytes.writeUnsignedInt(value);
+		bytes.position = 0;
+		sendBytes(bytes, type, FORMAT_UINT);
+
+	}
 
 
 	public function sendString(string: String, type: uint = 0): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendString() :: Socket not connected" );
+		if (!socket || !socket.connected) {
+			trace("TypedDataSocket->sendString() :: Socket not connected");
 			return;
 		}
 		var bytes: ByteArray = new ByteArray();
@@ -217,8 +263,8 @@ public class TypedTCPSocket {
 
 
 	public function sendObject(data: Object, type: uint = 0): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendObject() :: Socket not connected" );
+		if (!socket || !socket.connected) {
+			trace("TypedDataSocket->sendObject() :: Socket not connected");
 			return;
 		}
 		var bytes: ByteArray = new ByteArray();
@@ -229,14 +275,14 @@ public class TypedTCPSocket {
 
 
 	public function sendBytes(data: ByteArray, type: uint = 0, format: uint = 2): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendString() :: Socket not connected" );
+		if (!socket || !socket.connected) {
+			trace("TypedBytesString() :: Socket not connected");
 			return;
 		}
 		var sendData: ByteArray = new ByteArray();
 		sendData.writeUnsignedInt(format);
 		sendData.writeUnsignedInt(type);
-		if( format != FORMAT_EMPTY && format != FORMAT_POOLING && format != FORMAT_INT)
+		if (format != FORMAT_EMPTY && format != FORMAT_POOLING && format != FORMAT_INT && format != FORMAT_UINT)
 			sendData.writeUnsignedInt(data.length);
 		data.position = 0;
 		sendData.writeBytes(data);
@@ -247,13 +293,9 @@ public class TypedTCPSocket {
 	}
 
 
-	/**
-	 * Sends a message without data
-	 * @param type
-	 */
 	public function sendType(type: uint): void {
-		if( !socket || !socket.connected) {
-			trace("TypedDataSocket->sendString() :: Socket not connected" );
+		if (!socket || !socket.connected) {
+			trace("TypedTypeString() :: Socket not connected");
 			return;
 		}
 		var sendData: ByteArray = new ByteArray();
@@ -296,33 +338,33 @@ public class TypedTCPSocket {
 
 
 	public function addListenerForType(type: uint, listener: Function): void {
-		if( !type_to_signal )
+		if (!type_to_signal)
 			type_to_signal = new Dictionary();
 		addListenerForTypeToSignalMap(type_to_signal, type, listener);
 	}
 
 
 	public function removeListenerForType(type: uint, listener: Function): void {
-		if( !type_to_signal )
+		if (!type_to_signal)
 			return;
 
 		removeListenerForTypeFromSignalMap(type_to_signal, type, listener);
-		if( type_to_signal.length <= 0)
+		if (type_to_signal.length <= 0)
 			type_to_signal = null;
 	}
 
 
 	public function addProgressListenerForType(type: uint, listener: Function): void {
-		if( !type_to_progressSignal )
+		if (!type_to_progressSignal)
 			type_to_progressSignal = new Dictionary();
 		addListenerForTypeToSignalMap(type_to_progressSignal, type, listener);
 	}
 
 	public function removeProgressListenerForType(type: uint, listener: Function): void {
-		if( !type_to_progressSignal )
+		if (!type_to_progressSignal)
 			return;
 		removeListenerForTypeFromSignalMap(type_to_progressSignal, type, listener);
-		if( type_to_progressSignal.length <= 0)
+		if (type_to_progressSignal.length <= 0)
 			type_to_progressSignal = null;
 	}
 
@@ -408,7 +450,7 @@ public class TypedTCPSocket {
 
 		// if data is FORMAT_EMPTY there is nothing more to read
 		if( receivingMessageFormat == FORMAT_EMPTY) {
-			trace('received empty type', receivingMessageType);
+//			trace('received empty type', receivingMessageType);
 			dispatchMessage(null, receivingMessageFormat, receivingMessageType);
 			receivingMessageFormat = -1;
 			receivingMessageType = -1;
@@ -426,6 +468,14 @@ public class TypedTCPSocket {
 					onClientSocketData(event);
 				return;
 			}
+		}
+		else if( receivingMessageFormat == FORMAT_UINT) {
+			dispatchMessage(clientSocket.readUnsignedInt(), receivingMessageFormat, receivingMessageType);
+			receivingMessageFormat = -1;
+			receivingMessageType = -1;
+			if( clientSocket.bytesAvailable )
+				onClientSocketData(event);
+			return;
 		}
 		// else format is either Object or Bytes
 		else {
@@ -492,7 +542,7 @@ public class TypedTCPSocket {
 
 
 	private function onSocketConnect(event: Event): void {
-//		Log.info('EasySocket -> onSocketConnect()');
+		trace('EasySocket -> onSocketConnect()');
 //		if( retryTimer ) {
 //			retryTimer.stop();
 //			retryTimer.reset();
@@ -504,7 +554,7 @@ public class TypedTCPSocket {
 
 
 	private function onSocketClose(event: Event): void {
-//		Log.info('EasySocket -> onSocketClose()');
+		trace('EasySocket -> onSocketClose()');
 		signalConnection.dispatch(this, EVENT_CLOSED);
 		if( keepAlive ) {
 			connect(_remoteHost, _remotePort, keepAlive);
@@ -514,8 +564,11 @@ public class TypedTCPSocket {
 
 
 	private function onSocketError(event: *): void {
-//		Log.info('EasySocket -> onSocketError()');
-		if( event is IOErrorEvent)
+		trace('EasySocket -> onSocketError()');
+		if( event == null ) {
+			signalConnection.dispatch(this, EVENT_CREATESOCKETERROR);
+		}
+		else if( event is IOErrorEvent)
 			signalConnection.dispatch(this, EVENT_IOERROR);
 		else if( event is SecurityErrorEvent)
 			signalConnection.dispatch(this, EVENT_SECURITYERROR);

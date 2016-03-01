@@ -6,17 +6,18 @@ import flash.events.Event;
 import flash.events.ServerSocketConnectEvent;
 import flash.events.TimerEvent;
 import flash.net.ServerSocket;
+import flash.utils.ByteArray;
 import flash.utils.Dictionary;
 import flash.utils.Timer;
 
 import org.osflash.signals.Signal;
 
-public class TypedTCPSocketServer {
+public class TypedTCPSocketServer implements ITypedTCPSocket {
 
 	private var localPort: int;
 
 	private var serverSocket: ServerSocket;
-	private var clientSockets: Vector.<TypedTCPSocket>;
+	private var _clientSockets: Vector.<TypedTCPSocket>;
 
 	private var globalListeners: Vector.<Function>;
 	private var type_2_listenerVector: Dictionary;
@@ -24,19 +25,34 @@ public class TypedTCPSocketServer {
 	private var retryOnErrorTimer: Timer;
 	private var retryOnErrorDelay: Number = 3000;
 
+
+	// (this, Boolean)
+	public var signalListening: Signal;
 	// (this, socket:typedTCPSocket)
 	public var signalClientSocketConnect: Signal;
 
 
+	//////////////////////////////
+	// Getter / Setter
+	//////////////////////////////
+	public function get clientSockets(): Vector.<TypedTCPSocket> {
+		return _clientSockets;
+	}
 
+	//////////////////////////////
+	// Functions
+	//////////////////////////////
 
 	public function TypedTCPSocketServer() {
-		clientSockets = new <TypedTCPSocket>[];
+		_clientSockets = new <TypedTCPSocket>[];
+		signalListening = new Signal(TypedTCPSocketServer, Boolean);
 		signalClientSocketConnect = new Signal(TypedTCPSocketServer, TypedTCPSocket);
 	}
 
 
-	// disposing
+	//////////////////////////////
+	// Disposing
+	//////////////////////////////
 
 	public function dispose(): void {
 		disposeClients();
@@ -59,11 +75,11 @@ public class TypedTCPSocketServer {
 
 
 	protected function disposeClients(): void {
-		if( clientSockets ) {
-			for each (var socket: TypedTCPSocket in clientSockets) {
+		if( _clientSockets ) {
+			for each (var socket: TypedTCPSocket in _clientSockets) {
 				socket.dispose();
 			}
-			clientSockets.length = 0;
+			_clientSockets.length = 0;
 		}
 	}
 
@@ -77,41 +93,53 @@ public class TypedTCPSocketServer {
 	}
 
 
-	// sending
+	//////////////////////////////
+	// Sending
+	//////////////////////////////
 
-	public function sendIntToAll(value: int, type: uint = 0): void {
+	public function sendInt(value: int, type: uint = 0): void {
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].sendInt(value, type);
+			_clientSockets[i].sendInt(value, type);
 		}
 	}
-	public function sendStringToAll(string: String, type: uint = 0): void {
+	public function sendString(string: String, type: uint = 0): void {
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].sendString(string, type);
+			_clientSockets[i].sendString(string, type);
 		}
 	}
-	public function sendObjectToAll(data: Object, type: uint = 0): void {
+	public function sendObject(data: Object, type: uint = 0): void {
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].sendObject(data, type);
+			_clientSockets[i].sendObject(data, type);
 		}
 	}
+	public function sendBytes(bytes: ByteArray, type: uint = 0): void {
+		var i: int;
+		var length: int = _clientSockets.length;
+		for (i = 0; i < length; i++) {
+			_clientSockets[i].sendBytes(bytes, type);
+		}
+	}
+
 
 
 	public function sendType(type: uint): void {
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].sendType(type);
+			_clientSockets[i].sendType(type);
 		}
 	}
 
 
-	// listeners
+	//////////////////////////////
+	// Listeners
+	//////////////////////////////
 
 	public function addGlobalListener(listener: Function): void {
 		if( !globalListeners )
@@ -120,9 +148,9 @@ public class TypedTCPSocketServer {
 			globalListeners.push(listener);
 
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].signalDataReceiveComplete.add(listener);
+			_clientSockets[i].signalDataReceiveComplete.add(listener);
 		}
 	}
 
@@ -135,14 +163,14 @@ public class TypedTCPSocketServer {
 		}
 
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].signalDataReceiveComplete.remove(listener);
+			_clientSockets[i].signalDataReceiveComplete.remove(listener);
 		}
 	}
 
 
-	public function addListenerForGlobalType(type: uint, listener: Function): void {
+	public function addListenerForType(type: uint, listener: Function): void {
 		if( !type_2_listenerVector ) {
 			type_2_listenerVector = new Dictionary();
 			type_2_listenerVector[type] = new <Function>[listener];
@@ -153,14 +181,14 @@ public class TypedTCPSocketServer {
 			type_2_listenerVector[type] = new <Function>[listener];
 
 		var i: int;
-		var length: int = clientSockets.length;
+		var length: int = _clientSockets.length;
 		for (i = 0; i < length; i++) {
-			clientSockets[i].addListenerForType(type, listener);
+			_clientSockets[i].addListenerForType(type, listener);
 		}
 	}
 
 
-	public function removeListenerForGlobalType(type: uint, listener: Function): void {
+	public function removeListenerForType(type: uint, listener: Function): void {
 		if( !type_2_listenerVector)
 			return;
 
@@ -173,16 +201,18 @@ public class TypedTCPSocketServer {
 					delete type_2_listenerVector[type];
 
 				var i: int;
-				var length: int = clientSockets.length;
+				var length: int = _clientSockets.length;
 				for (i = 0; i < length; i++) {
-					clientSockets[i].removeListenerForType(type, listener);
+					_clientSockets[i].removeListenerForType(type, listener);
 				}
 			}
 		}
 	}
 
 
-	// start listening
+	//////////////////////////////
+	// Listening
+	//////////////////////////////
 
 	public function listen(localPort: int, retryOnError: Boolean = false): void {
 		this.localPort = localPort;
@@ -192,15 +222,21 @@ public class TypedTCPSocketServer {
 		disposeServerSocket();
 		if( !retryOnError )
 			disposeRetryOnErrorTimer();
+
+		if( serverSocket )
+			disposeServerSocket();
+
 		serverSocket = new ServerSocket();
 
 		try {
 			serverSocket.bind(localPort);
-			serverSocket.addEventListener(ServerSocketConnectEvent.CONNECT, onServerSocketConnect);
 			serverSocket.listen();
+			serverSocket.addEventListener(ServerSocketConnectEvent.CONNECT, onServerSocketConnect);
+			signalListening.dispatch(this, true);
 		}
 		catch(e: Error) {
 			trace("SignalServerSocket->init() ::", e.toString() );
+			signalListening.dispatch(this, false);
 			if( retryOnError ) {
 				if( !retryOnErrorTimer ) {
 					retryOnErrorTimer = new Timer(retryOnErrorDelay, 1);
@@ -215,7 +251,9 @@ public class TypedTCPSocketServer {
 
 
 
-	// privates
+	//////////////////////////////
+	// Privates
+	//////////////////////////////
 
 
 	private function onRetryOnErrorTimer(event: TimerEvent): void {
@@ -223,9 +261,9 @@ public class TypedTCPSocketServer {
 	}
 
 	private function removeClientSocket(typedTCPSocket: TypedTCPSocket): void {
-		var index: int = clientSockets.indexOf(typedTCPSocket);
+		var index: int = _clientSockets.indexOf(typedTCPSocket);
 		if( index > -1) {
-			clientSockets.splice(index, 1);
+			_clientSockets.splice(index, 1);
 			typedTCPSocket.signalConnection.remove(ontypedTCPSocketConnection);
 //			typedTCPSocket.signalDataReceiveComplete.remove(ontypedTCPSocketDataReceived);
 		}
@@ -238,7 +276,7 @@ public class TypedTCPSocketServer {
 		var typedTCPSocket: TypedTCPSocket = new TypedTCPSocket(event.socket);
 		typedTCPSocket.signalConnection.add(ontypedTCPSocketConnection);
 
-		clientSockets.push(typedTCPSocket);
+		_clientSockets.push(typedTCPSocket);
 
 		// adding global listerners
 		if( globalListeners ) {
@@ -269,5 +307,22 @@ public class TypedTCPSocketServer {
 			trace("SignalServerSocket->ontypedTCPSocketConnection() :: IOError" );
 		}
 	}
+
+	public function get remotePort(): int {
+		return localPort;
+	}
+
+	public function get connected(): Boolean {
+		if( !serverSocket )
+			return false;
+		return serverSocket.bound;
+	}
+
+	// TODO implement close()
+	public function close(): void {
+		trace('not implemented yet!');
+	}
+
+
 }
 }
